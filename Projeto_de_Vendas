@@ -1,6 +1,6 @@
--- **** PROJETO 1: DASHBOARD DE VENDAS ****
--- *** FERRAMENTAS UTILIZADAS: PostgreSQL e EXCEL ***
--- ** OBJETIVO: Criar um dashboard de vendas com os principais indicadores de desempenho e com os principais drives dos resultados do mês **
+**** PROJETO 1: DASHBOARD DE VENDAS ****
+*** FERRAMENTAS UTILIZADAS: PostgreSQL e EXCEL ***
+** OBJETIVO: Criar um dashboard de vendas com os principais indicadores de desempenho e com os principais drives dos resultados do mês **
 
 
 -- (Query 1) Receita, leads, conversão e ticket médio mês a mês
@@ -8,21 +8,21 @@
 
 select
 	leads.*,
-	vendas.vendas_efetuadas,
+	ven.vendas,
 	rec.receita,
 	conv.conversao,
 	tkt.tkt_medio	
 	into temp_tables.indicadores
 from temp_tables.lead_mes as leads
-left join temp_tables.vendas_efetuadas_mes as vendas
-	on leads.mes = vendas.mes
+left join temp_tables.vendas_efetuadas as ven
+	on leads.mes = ven.mes
 left join temp_tables.receita_mes as rec
-	on vendas.mes = rec.mes
+	on ven.mes = rec.mes
 left join temp_tables.conversao_mes as conv
 	on rec.mes = conv.mes
 left join temp_tables.tkt_medio_mes as tkt
 	on conv.mes = tkt.mes
-group by leads.mes, leads.possiveis_leads, vendas.vendas_efetuadas, rec.receita, conv.conversao, tkt.tkt_medio	
+group by leads.mes, leads.possiveis_leads, ven.vendas, rec.receita, conv.conversao, tkt.tkt_medio	
 order by leads.mes
 
 select * from temp_tables.indicadores
@@ -42,13 +42,14 @@ select * from temp_tables.lead_mes
 --QTD_VENDAS/mes--
 select 
 	date_trunc('month', paid_date) :: date as mes,
-	count (*) as vendas_efetuadas
-	into temp_tables.vendas_efetuadas_mes
+	count (*) as vendas
+	into temp_tables.vendas_efetuadas
 from sales.funnel
 group by mes
-order by mes, vendas_efetuadas desc
+order by mes, vendas desc
 
-select * from temp_tables.vendas_efetuadas_mes
+select * from temp_tables.vendas_efetuadas
+drop table temp_tables.vendas_efetuadas
 
 --RECEITA/mes--
 select 
@@ -95,12 +96,12 @@ drop table temp_tables.visitas_mes
 --CONVERSAO/mes--
 select 
 	vis.mes,
-	(cast(ven.vendas_efetuadas as float) / cast(vis.visitas_mes as float))*100 as conversao
+	(cast(ven.vendas_efetuadas_mes as float) / cast(vis.visitas_mes as float))*100 as conversao
 	into temp_tables.conversao_mes
 from temp_tables.visitas_mes as vis
 left join temp_tables.vendas_efetuadas_mes as ven
 	on vis.mes = ven.mes	
-group by vis.mes, vis.visitas_mes, ven.vendas_efetuadas
+group by vis.mes, vis.visitas_mes, ven.vendas_efetuadas_mes
 order by vis.mes
 
 select * from temp_tables.conversao_mes
@@ -153,7 +154,7 @@ select
 	date_trunc('month', paid_date) :: date as mes,
 	pro.brand,
 	count(*) as qtd_marca
---	into temp_tables.marcas_mais_vendidas
+	into temp_tables.marcas_mais_vendidas
 from sales.products as pro
 left join sales.funnel as fun
 	on pro.product_id = fun.product_id
@@ -171,7 +172,7 @@ select
 	date_trunc('month', paid_date) :: date as mes,
 	sto.store_name,
 	count(*) as vendas
---	into temp_tables.lojas_mais_vendidas
+	into temp_tables.lojas_mais_vendidas
 from sales.stores as sto
 left join sales.funnel as fun
 	on sto.store_id = fun.store_id
@@ -229,4 +230,5 @@ order by mes desc, dia_semana
 
 select * from temp_tables.num_semana
 drop table temp_tables.num_semana
+
 
