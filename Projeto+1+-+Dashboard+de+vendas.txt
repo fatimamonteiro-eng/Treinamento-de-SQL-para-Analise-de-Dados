@@ -1,0 +1,232 @@
+**** PROJETO 1: DASHBOARD DE VENDAS ****
+*** FERRAMENTAS UTILIZADAS: PostgreSQL e EXCEL ***
+** OBJETIVO: Criar um dashboard de vendas com os principais indicadores de desempenho e com os principais drives dos resultados do mês **
+
+
+-- (Query 1) Receita, leads, conversão e ticket médio mês a mês
+-- Colunas: mês, leads (#), vendas (#), receita (k, R$), conversão (%), ticket médio (k, R$)
+
+select
+	leads.*,
+	vendas.vendas_efetuadas,
+	rec.receita,
+	conv.conversao,
+	tkt.tkt_medio	
+	into temp_tables.indicadores
+from temp_tables.lead_mes as leads
+left join temp_tables.vendas_efetuadas_mes as vendas
+	on leads.mes = vendas.mes
+left join temp_tables.receita_mes as rec
+	on vendas.mes = rec.mes
+left join temp_tables.conversao_mes as conv
+	on rec.mes = conv.mes
+left join temp_tables.tkt_medio_mes as tkt
+	on conv.mes = tkt.mes
+group by leads.mes, leads.possiveis_leads, vendas.vendas_efetuadas, rec.receita, conv.conversao, tkt.tkt_medio	
+order by leads.mes
+
+select * from temp_tables.indicadores
+drop table temp_tables.indicadores
+
+--QTD_LEADS/mes--
+select 
+	date_trunc('month', visit_page_date) :: date as mes,
+	count (*) as possiveis_leads
+	into temp_tables.lead_mes
+from sales.funnel 	
+group by mes
+order by mes, possiveis_leads desc
+
+select * from temp_tables.lead_mes
+
+--QTD_VENDAS/mes--
+select 
+	date_trunc('month', paid_date) :: date as mes,
+	count (*) as vendas_efetuadas
+	into temp_tables.vendas_efetuadas_mes
+from sales.funnel
+group by mes
+order by mes, vendas_efetuadas desc
+
+select * from temp_tables.vendas_efetuadas_mes
+
+--RECEITA/mes--
+select 
+	date_trunc('month', fun.paid_date) :: date as mes,
+	(sum (pro.price :: float * (1+fun.discount)))/1000000 as receita
+	into temp_tables.receita_mes
+from sales.funnel as fun
+left join sales.products as pro
+	on fun.product_id = pro.product_id
+where fun.paid_date is not null
+group by mes
+order by mes, receita desc
+
+select * from temp_tables.receita_mes
+drop table temp_tables.receita_mes
+
+--TKT_MEDIO/mes--
+select 
+	date_trunc('month', fun.paid_date) :: date as mes,
+	((sum (pro.price :: float * (1+fun.discount))/count(*)))/1000 as tkt_medio
+	into temp_tables.tkt_medio_mes
+from sales.funnel as fun
+left join sales.products as pro
+	on fun.product_id = pro.product_id
+where fun.paid_date is not null
+group by mes
+order by mes, tkt_medio desc
+
+select * from temp_tables.tkt_medio_mes
+drop table temp_tables.tkt_medio_mes
+
+--VISITAS/mes--
+select 
+	date_trunc('month', visit_page_date) :: date as mes,
+	count (*) as visitas_mes
+	into temp_tables.visitas_mes
+from sales.funnel
+group by mes
+order by mes, visitas_mes desc
+
+select * from temp_tables.visitas_mes
+drop table temp_tables.visitas_mes
+
+--CONVERSAO/mes--
+select 
+	vis.mes,
+	(cast(ven.vendas_efetuadas as float) / cast(vis.visitas_mes as float))*100 as conversao
+	into temp_tables.conversao_mes
+from temp_tables.visitas_mes as vis
+left join temp_tables.vendas_efetuadas_mes as ven
+	on vis.mes = ven.mes	
+group by vis.mes, vis.visitas_mes, ven.vendas_efetuadas
+order by vis.mes
+
+select * from temp_tables.conversao_mes
+drop table temp_tables.conversao_mes
+
+=============================================================================
+
+-- (Query 2) Estados que mais venderam
+-- Colunas: país, estado, vendas (#)
+
+select 
+	date_trunc('month', paid_date) :: date as mes,
+	cou.pais,
+	cus.state,
+	count (*) as vendas
+	into temp_tables.vendas_efetuadas_mes
+from sales.funnel as fun
+left join sales.customers as cus
+	on fun.customer_id = cus.customer_id
+left join temp_tables.country as cou
+	on cus.state = cou.state
+where fun.paid_date is not null
+group by mes, cus.state, cou.pais
+order by mes desc, vendas desc
+limit 5
+
+select * from temp_tables.vendas_efetuadas_mes
+drop table temp_tables.vendas_efetuadas_mes
+
+--COLUNA_PAIS--
+select distinct
+	state,
+	case
+		when code between '11' and '99' then 'Brasil'
+		else 'Exterior'
+	end as pais
+	into temp_tables.country
+from temp_tables.regions
+order by state
+
+select * from temp_tables.country
+drop table temp_tables.country
+
+============================================================================
+
+-- (Query 3) Marcas que mais venderam no mês
+-- Colunas: marca, vendas (#)
+
+select 
+	date_trunc('month', paid_date) :: date as mes,
+	pro.brand,
+	count(*) as qtd_marca
+--	into temp_tables.marcas_mais_vendidas
+from sales.products as pro
+left join sales.funnel as fun
+	on pro.product_id = fun.product_id
+where fun.paid_date is not null
+group by mes, pro.brand
+order by mes desc, qtd_marca desc
+limit 5
+
+=============================================================================
+
+-- (Query 4) Lojas que mais venderam
+-- Colunas: loja, vendas (#)
+
+select 
+	date_trunc('month', paid_date) :: date as mes,
+	sto.store_name,
+	count(*) as vendas
+--	into temp_tables.lojas_mais_vendidas
+from sales.stores as sto
+left join sales.funnel as fun
+	on sto.store_id = fun.store_id
+where fun.paid_date is not null
+group by mes, sto.store_name
+order by mes desc, vendas desc
+limit 5
+
+=============================================================================
+
+-- (Query 5) Dias da semana com maior número de visitas ao site
+-- Colunas: dia_semana, dia da semana, visitas (#)
+
+
+select
+	dia_semana,
+	dia_da_semana,
+	qtd_visitas
+	into temp_tables.visitas_site_mes
+from temp_tables.semana
+limit 7
+
+select * from temp_tables.visitas_site_mes
+drop table temp_tables.visitas_site_mes
+
+---TABELA COM O NOME DO DIA DA SEMANA---
+select
+	dia_semana,
+	qtd_visitas,
+	case
+		when dia_semana = 0 then 'domingo'
+		when dia_semana = 1 then 'segunda'
+		when dia_semana = 2 then 'terça'
+		when dia_semana = 3 then 'quarta'
+		when dia_semana = 4 then 'quinta'
+		when dia_semana = 5 then 'sexta'
+		else 'sábado' 
+	end as dia_da_semana
+	into temp_tables.semana
+from temp_tables.num_semana
+
+select * from temp_tables.semana
+drop table temp_tables.semana
+
+
+----TABELA COM MES, DIA_SEMANA E QTD_VISITAS---
+select 
+	date_trunc('month', visit_page_date) :: date as mes,
+	extract ('dow' from visit_page_date) as dia_semana,	
+	count(visit_page_date) as qtd_visitas
+	into temp_tables.num_semana
+from sales.funnel
+group by mes, dia_semana
+order by mes desc, dia_semana
+
+select * from temp_tables.num_semana
+drop table temp_tables.num_semana
+
